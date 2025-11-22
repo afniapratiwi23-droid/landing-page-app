@@ -73,19 +73,23 @@ with st.sidebar:
     
     if st.button("💾 Simpan Semua API Keys"):
         if new_api_keys:
-            # Ensure directory exists
-            secrets_dir = ".streamlit"
-            if not os.path.exists(secrets_dir):
-                os.makedirs(secrets_dir)
+            try:
+                # Ensure directory exists
+                secrets_dir = ".streamlit"
+                if not os.path.exists(secrets_dir):
+                    os.makedirs(secrets_dir)
+                    
+                # Write to secrets.toml
+                secrets_path = os.path.join(secrets_dir, "secrets.toml")
+                keys_str = "\n".join(new_api_keys)
                 
-            # Write to secrets.toml
-            secrets_path = os.path.join(secrets_dir, "secrets.toml")
-            keys_str = "\n".join(new_api_keys)
-            
-            with open(secrets_path, "w") as f:
-                f.write(f'GOOGLE_API_KEY = """{keys_str}"""')
-            st.success(f"Tersimpan {len(new_api_keys)} API Keys! Refreshing...")
-            st.rerun()
+                with open(secrets_path, "w") as f:
+                    f.write(f'GOOGLE_API_KEY = """{keys_str}"""')
+                st.success(f"Tersimpan {len(new_api_keys)} API Keys! Refreshing...")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Gagal menyimpan API Keys: {e}")
+                st.info("Sebagai alternatif, Anda bisa langsung pakai API Key tanpa menyimpan. Cukup isi kolom di atas dan langsung klik Generate.")
         else:
             st.warning("Minimal isi 1 API Key dong bos!")
             
