@@ -71,25 +71,11 @@ with st.sidebar:
             if key_input.strip():
                 new_api_keys.append(key_input.strip())
     
-    if st.button("💾 Simpan Semua API Keys"):
+    if st.button("💾 Simpan API Keys (Sesi Ini)"):
         if new_api_keys:
-            try:
-                # Ensure directory exists
-                secrets_dir = ".streamlit"
-                if not os.path.exists(secrets_dir):
-                    os.makedirs(secrets_dir)
-                    
-                # Write to secrets.toml
-                secrets_path = os.path.join(secrets_dir, "secrets.toml")
-                keys_str = "\n".join(new_api_keys)
-                
-                with open(secrets_path, "w") as f:
-                    f.write(f'GOOGLE_API_KEY = """{keys_str}"""')
-                st.success(f"Tersimpan {len(new_api_keys)} API Keys! Refreshing...")
-                st.rerun()
-            except Exception as e:
-                st.error(f"Gagal menyimpan API Keys: {e}")
-                st.info("Sebagai alternatif, Anda bisa langsung pakai API Key tanpa menyimpan. Cukup isi kolom di atas dan langsung klik Generate.")
+            st.session_state.saved_api_keys = new_api_keys
+            st.success(f"✅ Tersimpan {len(new_api_keys)} API Keys untuk sesi ini!")
+            st.info("💡 Keys akan aktif selama browser tidak di-refresh. Untuk save permanen, edit file `.streamlit/secrets.toml` secara manual.")
         else:
             st.warning("Minimal isi 1 API Key dong bos!")
             
@@ -102,11 +88,22 @@ product_type = st.sidebar.radio(
 )
 
 # --- API KEY SETUP ---
-# Use the keys collected from the inputs (if any) or load from secrets
-api_keys = new_api_keys
-if not api_keys and "GOOGLE_API_KEY" in st.secrets:
+# Use the keys collected from the inputs (if any) or load from secrets or session state
+if 'saved_api_keys' not in st.session_state:
+    st.session_state.saved_api_keys = []
+
+# Priority: new_api_keys from current input > session state > secrets file
+if new_api_keys:
+    api_keys = new_api_keys
+    st.session_state.saved_api_keys = new_api_keys  # Save to session for persistence during session
+elif st.session_state.saved_api_keys:
+    api_keys = st.session_state.saved_api_keys
+elif "GOOGLE_API_KEY" in st.secrets:
     raw_keys = st.secrets["GOOGLE_API_KEY"]
     api_keys = [k.strip() for k in raw_keys.split('\n') if k.strip()]
+    st.session_state.saved_api_keys = api_keys
+else:
+    api_keys = []
 
 # --- HELPER: ROTATION GENERATOR ---
 def generate_content_with_rotation(prompt, keys):
@@ -381,6 +378,12 @@ if submitted:
                     copy_sections = {}
                     st.error("Gagal memisahkan copywriting, tapi HTML mungkin masih aman.")
 
+                # Success message
+                st.success("Landing Page Berhasil Dibuat! 🎉")
+                
+                # Create tabs for preview and code
+                tab1, tab2 = st.tabs(["📱 Live Preview", "💻 Source Code"])
+                
                 # Display HTML
                 with tab1:
                     st.caption("Preview (Tampilan mungkin sedikit berbeda tergantung browser)")
