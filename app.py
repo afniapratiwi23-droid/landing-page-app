@@ -57,7 +57,7 @@ with st.sidebar:
     st.info("Masukkan hingga 10 API Key. Sistem akan otomatis ganti ke key berikutnya jika limit habis.")
     
     new_api_keys = []
-    with st.expander("🔑 Kelola API Keys (Max 10)", expanded=True):
+    with st.expander("🔑 Kelola API Keys (Max 10)", expanded=False):
         for i in range(10):
             # Get existing value if available
             val = current_keys_list[i] if i < len(current_keys_list) else ""
