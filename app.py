@@ -1,6 +1,9 @@
 import streamlit as st
 import google.generativeai as genai
 import streamlit.components.v1 as components
+import json
+import requests
+from bs4 import BeautifulSoup
 
 # --- CONFIGURATION & SETUP ---
 st.set_page_config(
@@ -8,11 +11,6 @@ st.set_page_config(
     page_icon="🚀",
     layout="wide"
 )
-
-import json
-
-import requests
-from bs4 import BeautifulSoup
 
 # --- HELPER FUNCTIONS ---
 def scrape_content(url):
@@ -46,8 +44,7 @@ with st.sidebar:
     # Try to load existing key
     current_key = ""
     if "GOOGLE_API_KEY" in st.secrets:
-        if st.secrets["GOOGLE_API_KEY"] != "PASTE_YOUR_API_KEY_HERE":
-            current_key = st.secrets["GOOGLE_API_KEY"]
+        current_key = st.secrets["GOOGLE_API_KEY"]
 
     api_key_input = st.text_input(
         "Google API Key", 
@@ -59,30 +56,23 @@ with st.sidebar:
     
     if st.button("💾 Simpan API Key"):
         if api_key_input:
-            # Write to secrets.toml
-            secrets_path = ".streamlit/secrets.toml"
-            with open(secrets_path, "w") as f:
-                f.write(f'GOOGLE_API_KEY = "{api_key_input}"')
-            st.success("Tersimpan! Refreshing...")
+            st.success("API Key siap digunakan!")
             st.rerun()
         else:
             st.warning("Isi API Key dulu bos!")
             
     st.divider()
 
-st.sidebar.header("Pilih Jenis Produk")
-product_type = st.sidebar.radio(
-    "Kategori:",
-    ("Ebook / Produk Digital", "Produk Fisik / Barang")
-)
+    st.header("Pilih Jenis Produk")
+    product_type = st.radio(
+        "Kategori:",
+        ("Ebook / Produk Digital", "Produk Fisik / Barang")
+    )
 
 # --- API KEY SETUP ---
 final_api_key = api_key_input
-if not final_api_key:
-    if "GOOGLE_API_KEY" in st.secrets:
-        secret_key = st.secrets["GOOGLE_API_KEY"]
-        if secret_key != "PASTE_YOUR_API_KEY_HERE":
-            final_api_key = secret_key
+if not final_api_key and "GOOGLE_API_KEY" in st.secrets:
+    final_api_key = st.secrets["GOOGLE_API_KEY"]
 
 if final_api_key:
     genai.configure(api_key=final_api_key)
@@ -97,96 +87,27 @@ if "cta_text" not in st.session_state: st.session_state.cta_text = ""
 if "product_desc" not in st.session_state: st.session_state.product_desc = ""
 
 # --- INPUT SECTION ---
-product_name = st.text_input("Nama Produk (Wajib)", placeholder="Contoh: Ebook Jago Python / Sepatu Anti Air")
-
-if st.button("✨ Isi Otomatis (Magic Fill)"):
-    if not product_name:
-        st.error("Isi Nama Produk dulu dong!")
-    elif not final_api_key:
-        st.error("API Key belum ada! Cek sidebar.")
-    else:
-        with st.spinner("Sedang menerawang ide marketing..."):
-            try:
-                prompt = f"""
-                Berikan ide marketing untuk produk: "{product_name}".
-                Outputkan HANYA JSON dengan format:
-                {{
-                    "target_audience": "Target audience spesifik",
-                    "cta_text": "Kata-kata tombol CTA yang menarik (pendek)",
-                    "product_desc": "Deskripsi produk yang persuasif (2-3 kalimat)"
-                }}
-                """
-                
-                # Try Flash model first (2.0), fallback to latest alias
-                try:
-                    model = genai.GenerativeModel('gemini-2.0-flash')
-                    response = model.generate_content(prompt)
-                except Exception:
-                    model = genai.GenerativeModel('gemini-flash-latest')
-                    response = model.generate_content(prompt)
-                
-                text = response.text.replace("```json", "").replace("```", "")
-                data = json.loads(text)
-                
-                # Handle case where AI returns a list instead of dict
-                if isinstance(data, list):
-                    data = data[0]
-                
-                st.session_state.target_audience = data.get("target_audience", "")
-                st.session_state.cta_text = data.get("cta_text", "")
-                st.session_state.product_desc = data.get("product_desc", "")
-                st.success("Berhasil diisi! Silakan review di bawah.")
-                st.rerun()
-            except Exception as e:
-                st.error(f"Gagal generate: {e}")
-
 with st.form("input_form"):
-    col1, col2 = st.columns(2)
+    product_name = st.text_input("Nama Produk (Wajib)", placeholder="Contoh: Ebook Jago Python / Sepatu Anti Air")
     
+    col1, col2 = st.columns(2)
     with col1:
         target_audience = st.text_input("Target Audience", key="target_audience", placeholder="Kosongkan jika ingin AI yang menentukan")
-    
     with col2:
         cta_text = st.text_input("Teks Tombol / CTA", key="cta_text", placeholder="Kosongkan jika ingin AI yang menentukan")
         
-    # Tone of Voice Selector
     tone = st.selectbox(
         "Gaya Bahasa Copywriting",
-        ("Profesional & Berwibawa", "Santai & Akrab (Bahasa Gaul)", "Persuasif & Hard Selling", "Emosional & Menyentuh Hati", "Lucu & Humoris", "Curhat & Personal (Deep Talk)"),
-        index=5
+        ("Profesional & Berwibawa", "Santai & Akrab (Bahasa Gaul)", "Persuasif & Hard Selling", "Emosional & Menyentuh Hati", "Lucu & Humoris"),
+        index=2
     )
     
-    # --- COMPETITOR URL HISTORY ---
-    history_file = "competitor_history.json"
-    try:
-        with open(history_file, "r") as f:
-            url_history = json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError):
-        url_history = []
-
-    # Dropdown for history
-    history_options = ["➕ Input URL Baru"] + url_history
-    selected_history = st.selectbox("Pilih Link Kompetitor (Riwayat)", history_options)
+    # Competitor URL
+    competitor_url = st.text_input("Link Kompetitor (Opsional - Fitur ATM)", placeholder="Masukkan URL landing page kompetitor untuk ditiru polanya...")
     
-    if selected_history == "➕ Input URL Baru":
-        competitor_url = st.text_input("Link Kompetitor Baru (Opsional)", placeholder="Masukkan URL landing page kompetitor...")
-    else:
-        competitor_url = st.text_input("Link Kompetitor (Opsional - Fitur ATM)", placeholder="Masukkan URL landing page kompetitor untuk ditiru polanya...")
-        
-    # Conversion Boosters Toggle
     use_boosters = st.checkbox("🔥 Aktifkan Fitur 'Booster Penjualan' (Sticky CTA, Timer, FAQ, Garansi)", value=True)
     
-    product_desc = st.text_area("Deskripsi & Manfaat Utama", key="product_desc", height=150, placeholder="Kosongkan jika ingin AI yang mengarang deskripsi berdasarkan Nama Produk...")
-    
-    # Copy Helper
-    with st.expander("📋 Copy Teks (Target, CTA, Deskripsi)"):
-        st.caption("Klik ikon 'Copy' di pojok kanan atas setiap blok untuk menyalin.")
-        st.text("Target Audience:")
-        st.code(st.session_state.target_audience, language=None)
-        st.text("CTA:")
-        st.code(st.session_state.cta_text, language=None)
-        st.text("Deskripsi:")
-        st.code(st.session_state.product_desc, language=None)
+    product_desc = st.text_area("Deskripsi & Manfaat Utama", key="product_desc", height=100, placeholder="Jelaskan sedikit tentang produk Anda...")
     
     submitted = st.form_submit_button("✨ Generate Landing Page")
 
@@ -194,183 +115,99 @@ with st.form("input_form"):
 if submitted:
     if not product_name:
         st.error("Mohon isi Nama Produk!")
+    elif not final_api_key:
+        st.error("⚠️ API Key belum dimasukkan! Silakan masukkan di Sidebar sebelah kiri atau setting di secrets.toml")
     else:
-        # Save URL to history if new
-        if competitor_url and competitor_url not in url_history:
-            url_history.append(competitor_url)
-            with open(history_file, "w") as f:
-                json.dump(url_history, f)
-        if not final_api_key:
-            st.error("⚠️ API Key belum dimasukkan! Silakan masukkan di Sidebar sebelah kiri atau setting di secrets.toml")
-            st.stop()
-            
         # Loading State
         with st.spinner("Sedang meracik copywriting & kodingan... (Mungkin butuh 10-20 detik)"):
             try:
-                # Try Flash model first (2.0), fallback to latest alias
+                # Model Selection
                 try:
                     model = genai.GenerativeModel('gemini-2.0-flash')
-                    # Test call to ensure model works
                     model.generate_content("test")
                 except:
-                    model = genai.GenerativeModel('gemini-flash-latest')
+                    model = genai.GenerativeModel('gemini-1.5-flash')
                 
-                # --- PROMPT ENGINEERING ---
-                # Handle optional fields
-                desc_prompt = product_desc if product_desc else "TIDAK ADA. Karanglah deskripsi yang sangat menarik, persuasif, dan menjual berdasarkan Nama Produk. Buat seolah-olah ini produk best-seller."
-                target_prompt = target_audience if target_audience else "TIDAK ADA. Analisa dan tentukan target audience yang paling relevan dan potensial untuk produk ini."
-                cta_prompt = cta_text if cta_text else "TIDAK ADA. Buat CTA yang mendesak dan mengundang klik (misal: Beli Sekarang, Ambil Diskon 50%, dll)."
+                # Prompt Construction
+                desc_prompt = product_desc if product_desc else "TIDAK ADA. Karanglah deskripsi yang sangat menarik."
+                target_prompt = target_audience if target_audience else "TIDAK ADA. Tentukan target audience yang paling relevan."
+                cta_prompt = cta_text if cta_text else "TIDAK ADA. Buat CTA yang mendesak."
                 
                 competitor_data = ""
                 if competitor_url:
                     scraped_text = scrape_content(competitor_url)
-                    competitor_data = f"""
-                    DATA KOMPETITOR (ATM - AMATI TIRU MODIFIKASI):
-                    Berikut adalah konten dari landing page kompetitor:
-                    ---
-                    {scraped_text}
-                    ---
-                    TUGAS ATM:
-                    1. Analisa struktur dan copywriting kompetitor di atas.
-                    2. AMBIL poin-poin winning campaign mereka (hook, benefit, offer).
-                    3. JANGAN MENJIPLAK PLEK-PLEKAN.
-                    4. MODIFIKASI agar versi kita LEBIH MENJUAL, LEBIH PREMIUM, dan LEBIH PERSUASIF.
-                    5. Kalahkan kualitas copywriting mereka!
-                    """
+                    competitor_data = f"DATA KOMPETITOR (ATM): {scraped_text[:2000]}"
 
                 booster_instruction = ""
                 if use_boosters:
-                    booster_instruction = """
-                    FITUR BOOSTER PENJUALAN (WAJIB ADA):
-                    1. **STICKY CTA (Mobile Only)**: Buat tombol CTA yang melayang di bawah layar (fixed bottom) khusus tampilan mobile. Gunakan class `fixed bottom-0 left-0 w-full p-4 bg-white shadow-lg md:hidden z-50`.
-                    2. **URGENCY TIMER**: Tambahkan Countdown Timer sederhana (misal: "Promo berakhir dalam 15:00 menit") di dekat tombol CTA utama. Gunakan JavaScript vanilla sederhana untuk menjalankannya.
-                    3. **FAQ SECTION**: Buat section FAQ (Tanya Jawab) yang menjawab 3-5 keraguan utama pembeli (Objection Handling). Gunakan tag <details> dan <summary> untuk accordion.
-                    4. **TRUST BADGES**: Tambahkan elemen visual "Garansi 30 Hari Uang Kembali", "Pembayaran Aman", dll di bawah tombol CTA.
-                    """
+                    booster_instruction = "FITUR BOOSTER: Tambahkan Sticky CTA (Mobile), Countdown Timer, FAQ Section, dan Trust Badges."
 
-                base_prompt = f"""
-                Bertindaklah sebagai Expert Web Developer & UI/UX Designer kelas dunia yang biasa menangani klien "High-Ticket".
-                Tugasmu adalah membuat SATU FILE HTML LENGKAP (Single File) untuk Landing Page produk dengan standar desain PREMIUM.
+                # Specific Scenarios
+                if product_type == "Ebook / Produk Digital":
+                    scenario_prompt = "FOKUS: EBOOK. Struktur Storytelling: Headline Provokatif -> Cerita Masalah -> Solusi Ebook -> Benefit List -> Bonus -> Harga Coret -> Garansi."
+                else:
+                    scenario_prompt = "FOKUS: PRODUK FISIK. Struktur Visual: Hero Image Besar -> Masalah -> Solusi Produk -> Benefit Grid -> Testimoni Image -> Scarcity Offer -> Form Order."
+
+                # FINAL PROMPT
+                final_prompt = f"""
+                Bertindaklah sebagai Expert Web Developer. Buat SATU FILE HTML LENGKAP untuk Landing Page: "{product_name}".
                 
-                DATA PRODUK:
-                - Nama: {product_name}
+                DATA:
                 - Deskripsi: {desc_prompt}
                 - Target: {target_prompt}
                 - CTA: {cta_prompt}
-                - GAYA BAHASA: {tone} (Wajib ikuti tone ini di seluruh teks!)
-                
-                {competitor_data}
-                
-                INSTRUKSI DESAIN (PENTING):
-                1. **VIBE**: PROFESIONAL, MENARIK, dan "SOFT". Jangan terlalu polos (boring), tapi jangan norak. Harus terlihat "Eye-Catching" tapi tetap elegan.
-                2. **COLOR PALETTE**: Gunakan warna-warna **SOFT PASTEL & GRADIENT**.
-                   - Background utama jangan hanya putih polos. Gunakan `bg-slate-50`, `bg-blue-50`, atau gradient halus `bg-gradient-to-br from-indigo-50 to-white`.
-                   - Gunakan warna Primary yang lembut tapi tegas (misal: Soft Blue, Sage Green, atau Coral).
-                3. **LAYOUT & SECTIONS**:
-                   - **Alternating Backgrounds**: Pastikan setiap section punya warna background yang selang-seling (Misal: Hero (Gradient) -> Features (White) -> Testimoni (Soft Grey) -> CTA (Accent Color)).
-                   - Gunakan **Card Design** (Kotak putih dengan shadow halus) untuk menonjolkan konten di atas background berwarna.
-                4. **TYPOGRAPHY**: Gunakan font modern (Google Fonts). Judul gunakan warna gelap (bukan hitam pekat), Body text gunakan abu-abu tua.
-                5. **UI TRENDS**:
-                   - **Glassmorphism**: Gunakan efek kaca (`bg-white/80 backdrop-blur-md`) untuk header atau kartu floating.
-                   - **Soft Shadows**: Gunakan `shadow-lg` atau `shadow-xl` yang warnanya pudar (colored shadows) agar terlihat modern.
-                   - **Rounded Corners**: Gunakan `rounded-2xl` atau `rounded-3xl` untuk kesan friendly & modern.
-                6. **TRUST ELEMENTS**: Tambahkan section "Featured In" atau "Trusted By" dengan logo placeholder.
-                
-                {booster_instruction}
-                
-                TEKNIS:
-                - Gunakan Tailwind CSS via CDN (wajib).
-                - Pastikan Mobile Responsive 100%.
-                - Jangan gunakan CSS eksternal atau JS eksternal selain Tailwind CDN.
-                - Pastikan tag <html>, <head>, dan <body> lengkap.
-                """
+                - Tone: {tone}
+                - {competitor_data}
+                - {booster_instruction}
+                - {scenario_prompt}
 
-                if product_type == "Ebook / Produk Digital":
-                    scenario_prompt = """
-                    SKENARIO: EBOOK / DIGITAL PRODUCT (Storytelling Mode)
-                    Struktur Halaman:
-                    1. **Headline Provokatif**: Fokus pada pain point/frustasi {target_audience}. Gunakan font besar & bold.
-                    2. **Story Section**: 2-3 paragraf pendek. Ceritakan masalah yang relate dengan user. Gunakan bahasa santai ("Lu/Gue" atau "Anda" yang akrab).
-                    3. **Solution**: Perkenalkan {product_name} sebagai solusi akhir.
-                    4. **What You Get**: List bullet points materi/isi produk.
-                    5. **Bonus Section**: Tambahkan 2-3 bonus fiktif yang relevan (misal: Cheatsheet, Video Tutorial) untuk menaikkan value.
-                    6. **Pricing & Guarantee**: Tampilkan harga coret (diskon) dan Garansi Uang Kembali 30 Hari.
-                    7. **Sticky CTA**: Tombol beli yang sangat menonjol warnanya.
-                    """
-                else: # Produk Fisik
-                    scenario_prompt = """
-                    SKENARIO: PRODUK FISIK (Visual & Urgency Mode)
-                    Struktur Halaman:
-                    1. **Hero Section**: Background bersih, Placeholder gambar produk besar di tengah/kanan. Headline kuat & singkat.
-                    2. **Agitation**: Sub-headline yang menekan masalah (misal: "Sering merasa minder karena...?").
-                    3. **Product Solution**: Penjelasan singkat cara pakai & solusi praktis.
-                    4. **Benefit Grid**: Layout Grid 2x2 atau 4 kolom. Ikon (bisa pakai emoji atau SVG inline) + Poin keunggulan.
-                    5. **Social Proof**: Placeholder untuk 3 testimoni user (Foto bulat + Nama + Teks pendek).
-                    6. **Scarcity Offer**: "Promo Terbatas", "Beli 2 Gratis 1", atau Countdown Timer (tampilan visual saja). Harga coret besar.
-                    7. **Simple Form**: Form statis (hanya tampilan) untuk Nama & WhatsApp sebelum tombol CTA.
-                    """
+                INSTRUKSI TEKNIS:
+                1. Gunakan Tailwind CSS via CDN.
+                2. Desain harus PREMIUM, MODERN, dan RESPONSIF (Mobile Friendly).
+                3. Gunakan warna Soft/Gradient yang profesional.
 
-                final_prompt = base_prompt + "\n" + scenario_prompt + "\n\nOutputkan HANYA kode HTML murni tanpa markdown ```html ```."
-
-                # Generate
-                response = model.generate_content(final_prompt)
-                html_code = response.text
-                
-                # Cleanup markdown formatting if present
-                html_code = html_code.replace("```html", "").replace("```", "")
-                
-                # --- OUTPUT ---
-                st.success("Landing Page Berhasil Dibuat! 🎉")
-                
-                # Tabs for Preview & Code
-                tab1, tab2 = st.tabs(["📱 Live Preview", "💻 Source Code"])
-                INSTRUKSI OUTPUT (WAJIB JSON):
-                Jangan hanya berikan HTML. Outputkan data dalam format JSON valid sebagai berikut:
-                {
-                    "copywriting": {
-                        "headline": "Headline yang nendang...",
-                        "subheadline": "Subheadline yang menjelaskan benefit...",
-                        "body_copy": "Paragraf pembuka/storytelling...",
-                        "benefits": ["Benefit 1", "Benefit 2", "Benefit 3", ...],
-                        "cta": "Teks tombol CTA",
-                        "guarantee": "Teks garansi..."
-                    },
+                OUTPUT WAJIB JSON FORMAT:
+                Outputkan HANYA JSON valid dengan struktur:
+                {{
+                    "copywriting": {{
+                        "headline": "...",
+                        "subheadline": "...",
+                        "body_copy": "...",
+                        "benefits": ["...", "..."],
+                        "cta": "...",
+                        "guarantee": "..."
+                    }},
                     "html_code": "<!DOCTYPE html>..."
-                }
-                Pastikan "html_code" berisi kode HTML lengkap (Single File) dengan CSS Tailwind yang sudah di-embed.
+                }}
+                Pastikan "html_code" berisi seluruh kode HTML single file yang siap pakai.
                 """
 
-                if product_type == "Ebook / Produk Digital":
-                    prompt = base_prompt + "\n\nFOKUS PRODUK: EBOOK/DIGITAL. Tekankan pada 'Instant Access', 'Kemudahan', dan 'Transformasi'."
-                else:
-                    prompt = base_prompt + "\n\nFOKUS PRODUK: FISIK/BARANG. Tekankan pada 'Kualitas Material', 'Pengiriman Cepat', dan 'Garansi Fisik'."
-
-                response = model.generate_content(prompt)
+                response = model.generate_content(final_prompt)
+                text_response = response.text.replace("```json", "").replace("```", "").strip()
                 
-                # Parse JSON Response
-                text_response = response.text.replace("```json", "").replace("```", "")
+                # Parse JSON
                 try:
                     data = json.loads(text_response)
-                    # Handle if AI returns list
                     if isinstance(data, list): data = data[0]
                     
                     generated_html = data.get("html_code", "")
                     copy_sections = data.get("copywriting", {})
-                except json.JSONDecodeError:
-                    # Fallback if JSON fails (rare but possible)
+                except:
+                    # Fallback if JSON fails
                     generated_html = text_response
                     copy_sections = {}
-                    st.error("Gagal memisahkan copywriting, tapi HTML mungkin masih aman.")
 
-                # Display HTML
+                # Display Result
+                st.success("Landing Page Berhasil Dibuat! 🎉")
+                
+                tab1, tab2 = st.tabs(["📱 Live Preview", "💻 Source Code"])
+                
                 with tab1:
-                    st.caption("Preview (Tampilan mungkin sedikit berbeda tergantung browser)")
                     components.html(generated_html, height=800, scrolling=True)
                 
                 with tab2:
                     st.code(generated_html, language="html")
 
-                # Download Button
                 st.download_button(
                     label="⬇️ Download HTML File",
                     data=generated_html,
@@ -378,32 +215,9 @@ if submitted:
                     mime="text/html"
                 )
                 
-                # Copywriting Sections
                 if copy_sections:
-                    st.divider()
-                    st.subheader("📝 Draft Copywriting (Siap Copy)")
-                    st.info("Jika Anda hanya butuh teksnya saja untuk dipasang di platform lain (WordPress, Elementor, dll).")
-                    
-                    with st.expander("Lihat Draft Copywriting", expanded=True):
-                        st.text("Headline:")
-                        st.code(copy_sections.get("headline", ""), language=None)
-                        
-                        st.text("Subheadline:")
-                        st.code(copy_sections.get("subheadline", ""), language=None)
-                        
-                        st.text("Body Copy / Story:")
-                        st.code(copy_sections.get("body_copy", ""), language=None)
-                        
-                        st.text("Poin-Poin Benefit:")
-                        benefits_text = "\n".join([f"- {b}" for b in copy_sections.get("benefits", [])])
-                        st.code(benefits_text, language=None)
-                        
-                        st.text("Call to Action (CTA):")
-                        st.code(copy_sections.get("cta", ""), language=None)
-                        
-                        st.text("Garansi:")
-                        st.code(copy_sections.get("guarantee", ""), language=None)
+                    with st.expander("📝 Lihat Copywriting (Teks Saja)"):
+                        st.json(copy_sections)
 
             except Exception as e:
-                st.error(f"Gagal generate: {e}")
-                st.error("Coba lagi, mungkin AI sedang sibuk atau kuota habis.")
+                st.error(f"Terjadi kesalahan: {e}")
