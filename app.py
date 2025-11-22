@@ -39,34 +39,55 @@ def scrape_content(url):
     except Exception as e:
         return f"Gagal scraping: {e}"
 
+import os
+
 # --- SIDEBAR ---
 with st.sidebar:
     st.header("Konfigurasi")
     
     # Try to load existing key
-    current_key = ""
+    current_keys_str = ""
     if "GOOGLE_API_KEY" in st.secrets:
         if st.secrets["GOOGLE_API_KEY"] != "PASTE_YOUR_API_KEY_HERE":
-            current_key = st.secrets["GOOGLE_API_KEY"]
+            current_keys_str = st.secrets["GOOGLE_API_KEY"]
+            
+    # Split existing keys for pre-filling
+    current_keys_list = [k.strip() for k in current_keys_str.split('\n') if k.strip()]
 
-    api_key_input = st.text_input(
-        "Google API Key", 
-        type="password",
-        value=current_key,
-        placeholder="Paste API Key di sini...",
-        help="Dapatkan API Key di https://aistudio.google.com/"
-    )
+    st.info("Masukkan hingga 10 API Key. Sistem akan otomatis ganti ke key berikutnya jika limit habis.")
     
-    if st.button("💾 Simpan API Key"):
-        if api_key_input:
+    new_api_keys = []
+    with st.expander("🔑 Kelola API Keys (Max 10)", expanded=True):
+        for i in range(10):
+            # Get existing value if available
+            val = current_keys_list[i] if i < len(current_keys_list) else ""
+            key_input = st.text_input(
+                f"API Key #{i+1}", 
+                value=val,
+                type="password",
+                placeholder=f"Paste API Key ke-{i+1} di sini...",
+                key=f"api_key_input_{i}"
+            )
+            if key_input.strip():
+                new_api_keys.append(key_input.strip())
+    
+    if st.button("💾 Simpan Semua API Keys"):
+        if new_api_keys:
+            # Ensure directory exists
+            secrets_dir = ".streamlit"
+            if not os.path.exists(secrets_dir):
+                os.makedirs(secrets_dir)
+                
             # Write to secrets.toml
-            secrets_path = ".streamlit/secrets.toml"
+            secrets_path = os.path.join(secrets_dir, "secrets.toml")
+            keys_str = "\n".join(new_api_keys)
+            
             with open(secrets_path, "w") as f:
-                f.write(f'GOOGLE_API_KEY = "{api_key_input}"')
-            st.success("Tersimpan! Refreshing...")
+                f.write(f'GOOGLE_API_KEY = """{keys_str}"""')
+            st.success(f"Tersimpan {len(new_api_keys)} API Keys! Refreshing...")
             st.rerun()
         else:
-            st.warning("Isi API Key dulu bos!")
+            st.warning("Minimal isi 1 API Key dong bos!")
             
     st.divider()
 
@@ -77,15 +98,38 @@ product_type = st.sidebar.radio(
 )
 
 # --- API KEY SETUP ---
-final_api_key = api_key_input
-if not final_api_key:
-    if "GOOGLE_API_KEY" in st.secrets:
-        secret_key = st.secrets["GOOGLE_API_KEY"]
-        if secret_key != "PASTE_YOUR_API_KEY_HERE":
-            final_api_key = secret_key
+# Use the keys collected from the inputs (if any) or load from secrets
+api_keys = new_api_keys
+if not api_keys and "GOOGLE_API_KEY" in st.secrets:
+    raw_keys = st.secrets["GOOGLE_API_KEY"]
+    api_keys = [k.strip() for k in raw_keys.split('\n') if k.strip()]
 
-if final_api_key:
-    genai.configure(api_key=final_api_key)
+# --- HELPER: ROTATION GENERATOR ---
+def generate_content_with_rotation(prompt, keys):
+    last_error = None
+    for i, key in enumerate(keys):
+        try:
+            genai.configure(api_key=key)
+            # Try Flash model first (2.0), fallback to latest alias
+            try:
+                model = genai.GenerativeModel('gemini-2.0-flash')
+                response = model.generate_content(prompt)
+                return response
+            except Exception:
+                model = genai.GenerativeModel('gemini-flash-latest')
+                response = model.generate_content(prompt)
+                return response
+        except Exception as e:
+            last_error = e
+            print(f"Key {i+1} failed: {e}")
+            continue # Try next key
+    
+    # If all failed
+    raise last_error
+
+if api_keys:
+    # Configure with first key just for init (though rotation handles it)
+    genai.configure(api_key=api_keys[0])
 
 # --- MAIN CONTENT ---
 st.title("🚀 Landing Page Generator AI")
@@ -102,7 +146,7 @@ product_name = st.text_input("Nama Produk (Wajib)", placeholder="Contoh: Ebook J
 if st.button("✨ Isi Otomatis (Magic Fill)"):
     if not product_name:
         st.error("Isi Nama Produk dulu dong!")
-    elif not final_api_key:
+    elif not api_keys:
         st.error("API Key belum ada! Cek sidebar.")
     else:
         with st.spinner("Sedang menerawang ide marketing..."):
@@ -117,13 +161,7 @@ if st.button("✨ Isi Otomatis (Magic Fill)"):
                 }}
                 """
                 
-                # Try Flash model first (2.0), fallback to latest alias
-                try:
-                    model = genai.GenerativeModel('gemini-2.0-flash')
-                    response = model.generate_content(prompt)
-                except Exception:
-                    model = genai.GenerativeModel('gemini-flash-latest')
-                    response = model.generate_content(prompt)
+                response = generate_content_with_rotation(prompt, api_keys)
                 
                 text = response.text.replace("```json", "").replace("```", "")
                 data = json.loads(text)
@@ -200,21 +238,13 @@ if submitted:
             url_history.append(competitor_url)
             with open(history_file, "w") as f:
                 json.dump(url_history, f)
-        if not final_api_key:
+        if not api_keys:
             st.error("⚠️ API Key belum dimasukkan! Silakan masukkan di Sidebar sebelah kiri atau setting di secrets.toml")
             st.stop()
             
         # Loading State
         with st.spinner("Sedang meracik copywriting & kodingan... (Mungkin butuh 10-20 detik)"):
             try:
-                # Try Flash model first (2.0), fallback to latest alias
-                try:
-                    model = genai.GenerativeModel('gemini-2.0-flash')
-                    # Test call to ensure model works
-                    model.generate_content("test")
-                except:
-                    model = genai.GenerativeModel('gemini-flash-latest')
-                
                 # --- PROMPT ENGINEERING ---
                 # Handle optional fields
                 desc_prompt = product_desc if product_desc else "TIDAK ADA. Karanglah deskripsi yang sangat menarik, persuasif, dan menjual berdasarkan Nama Produk. Buat seolah-olah ini produk best-seller."
@@ -329,8 +359,8 @@ if submitted:
 
                 final_prompt = base_prompt + "\n" + scenario_prompt + "\n" + json_instruction
 
-                # Generate
-                response = model.generate_content(final_prompt)
+                # Generate with Rotation
+                response = generate_content_with_rotation(final_prompt, api_keys)
                 
                 # Parse JSON Response
                 text_response = response.text.replace("```json", "").replace("```", "")
