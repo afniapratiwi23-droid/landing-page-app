@@ -75,38 +75,6 @@ def scrape_content(url):
     except Exception as e:
         return f"Gagal scraping: {e}"
 
-def parse_price(price_str):
-    try:
-        price_str = price_str.lower().replace(" ", "").replace("rp", "").replace(".", "").replace(",", "")
-        multiplier = 1
-        if "ribu" in price_str or "rb" in price_str:
-            multiplier = 1000
-            price_str = price_str.replace("ribu", "").replace("rb", "")
-        elif "juta" in price_str or "jt" in price_str:
-            multiplier = 1000000
-            price_str = price_str.replace("juta", "").replace("jt", "")
-            
-        import re
-        # Extract digits
-        digits = re.sub(r'\D', '', price_str)
-        if not digits: return 0
-        return int(digits) * multiplier
-    except:
-        return 0
-
-def calculate_discount(original_price_str, selling_price_str):
-    try:
-        original = parse_price(original_price_str)
-        selling = parse_price(selling_price_str)
-        
-        if original > selling and original > 0:
-            discount = int(((original - selling) / original) * 100)
-            return f"HEMAT {discount}% HARI INI"
-        else:
-            return "HEMAT HARI INI"
-    except Exception:
-        return "PENAWARAN SPESIAL"
-
 import os
 
 # --- SIDEBAR ---
@@ -125,17 +93,19 @@ with st.sidebar:
     st.info("Masukkan hingga 10 API Key. Sistem akan otomatis ganti ke key berikutnya jika limit habis.")
     
     new_api_keys = []
-    with st.expander("🔑 Kelola API Keys", expanded=False):
-        api_keys_input = st.text_area(
-            "API Keys (Satu per baris)",
-            value=current_keys_str,
-            height=200,
-            placeholder="Paste API Keys di sini, satu per baris...\nAIzaSy...\nAIzaSy...",
-            help="Masukkan satu API Key per baris. Sistem akan otomatis merotasi key jika limit habis."
-        )
-        
-        if api_keys_input.strip():
-            new_api_keys = [k.strip() for k in api_keys_input.split('\n') if k.strip()]
+    with st.expander("🔑 Kelola API Keys (Max 10)", expanded=False):
+        for i in range(10):
+            # Get existing value if available
+            val = current_keys_list[i] if i < len(current_keys_list) else ""
+            key_input = st.text_input(
+                f"API Key #{i+1}", 
+                value=val,
+                type="password",
+                placeholder=f"Paste API Key ke-{i+1} di sini...",
+                key=f"api_key_input_{i}"
+            )
+            if key_input.strip():
+                new_api_keys.append(key_input.strip())
     
     if st.button("💾 Simpan API Keys (Sesi Ini)"):
         if new_api_keys:
@@ -211,12 +181,11 @@ if "copy_sections" not in st.session_state: st.session_state.copy_sections = {}
 
 # --- INPUT SECTION ---
 product_name = st.text_input("Nama Produk (Wajib)", placeholder="Contoh: Ebook Jago Python / Sepatu Anti Air")
+product_image = st.text_input("Link Gambar Utama (Muncul di bawah heading 'Solusi') - Opsional", placeholder="https://example.com/gambar-utama.jpg", help="Gambar ini muncul tepat SETELAH heading 'Solusi: [Nama Produk]' SEBELUM penjelasan")
+solution_cta_image = st.text_input("Link Gambar CTA/Hook (Muncul setelah kalimat ajakan) - Opsional", placeholder="https://example.com/gambar-cta.jpg", help="Gambar ini muncul SETELAH kalimat hook: 'Ebook ini bongkar...'')
 
-col_price1, col_price2 = st.columns(2)
-with col_price1:
-    harga_coret = st.text_input("Harga Normal / Coret (Opsional)", placeholder="Contoh: Rp 999.000")
-with col_price2:
-    harga_jual = st.text_input("Harga Jual / Promo (Opsional)", placeholder="Contoh: Rp 99.000")
+with st.expander("🖼️ Tambah Gambar Lain (Untuk Section Features/Gallery)"):
+    additional_images_str = st.text_area("Masukkan URL Gambar Tambahan (Satu per baris)", placeholder="https://example.com/img1.jpg\nhttps://example.com/img2.jpg")
 
 # Ebook Upload
 uploaded_ebook = st.file_uploader("📂 Upload Ebook/Materi Produk (PDF, DOCX, TXT) - Opsional", type=["pdf", "docx", "txt"], help="AI akan membaca isi file ini untuk membuat konten landing page yang lebih akurat dan 'berisi'.")
@@ -256,43 +225,7 @@ if st.button("✨ Isi Otomatis (Magic Fill)"):
             except Exception as e:
                 st.error(f"Gagal generate: {e}")
 
-# --- COPY HELPER (MOVED OUTSIDE FORM) ---
-if st.session_state.target_audience or st.session_state.cta_text or st.session_state.product_desc:
-    with st.expander("📋 Copy Teks Hasil Magic Fill (Target, CTA, Deskripsi)", expanded=True):
-        st.info("Jika tombol copy di pojok kanan atas tidak jalan, silakan copy manual dari kolom di bawah ini.")
-        
-        st.text("Target Audience:")
-        st.code(st.session_state.target_audience, language=None)
-        st.text_area("Copy Manual (Target Audience)", value=st.session_state.target_audience, height=100, key="copy_target")
-        
-        st.text("CTA:")
-        st.code(st.session_state.cta_text, language=None)
-        st.text_area("Copy Manual (CTA)", value=st.session_state.cta_text, height=70, key="copy_cta")
-        
-        st.text("Deskripsi:")
-        st.code(st.session_state.product_desc, language=None)
-        st.text_area("Copy Manual (Deskripsi)", value=st.session_state.product_desc, height=150, key="copy_desc")
-
 with st.form("input_form"):
-    # Image Fields (INSIDE FORM)
-    st.markdown("### 🖼️ Pengaturan Gambar")
-    hero_image = st.text_input("Link Gambar Hero (Muncul di bawah Headline Utama) - Opsional", placeholder="https://example.com/hero.jpg", help="Gambar ini muncul di Hero section, tepat di bawah headline provokatif")
-    product_image = st.text_input("Link Gambar Utama (Muncul di bawah heading 'Solusi') - Opsional", placeholder="https://example.com/gambar-utama.jpg", help="Gambar ini muncul tepat SETELAH heading 'Solusi: [Nama Produk]' SEBELUM penjelasan")
-    
-    # Bonus Section (INSIDE FORM)
-    st.markdown("### 🎁 Bonus (Opsional)")
-    st.caption("Tambahkan bonus untuk meningkatkan value produk Anda. Kosongkan jika tidak ada bonus.")
-    bonus_col1, bonus_col2, bonus_col3 = st.columns(3)
-    
-    with bonus_col1:
-        bonus_1 = st.text_input("Bonus #1", placeholder="Contoh: Ebook Panduan Cepat", help="Bonus pertama yang akan ditampilkan")
-    
-    with bonus_col2:
-        bonus_2 = st.text_input("Bonus #2", placeholder="Contoh: Video Tutorial", help="Bonus kedua yang akan ditampilkan")
-    
-    with bonus_col3:
-        bonus_3 = st.text_input("Bonus #3", placeholder="Contoh: Template Siap Pakai", help="Bonus ketiga yang akan ditampilkan")
-    
     col1, col2 = st.columns(2)
     
     with col1:
@@ -326,14 +259,21 @@ with st.form("input_form"):
         competitor_url = st.text_input("Link Kompetitor (Opsional - Fitur ATM)", placeholder="Masukkan URL landing page kompetitor untuk ditiru polanya...")
         
     # Conversion Boosters Toggle
-    use_boosters = st.checkbox("🔥 Aktifkan Fitur 'Booster Penjualan' (FAQ, Garansi, Trust Badges)", value=True)
+    use_boosters = st.checkbox("🔥 Aktifkan Fitur 'Booster Penjualan' (Sticky CTA, Timer, FAQ, Garansi)", value=True)
     
     product_desc = st.text_area("Deskripsi & Manfaat Utama", key="product_desc", height=150, placeholder="Kosongkan jika ingin AI yang mengarang deskripsi berdasarkan Nama Produk...")
     
 
     
     # Copy Helper
-
+    with st.expander("📋 Copy Teks (Target, CTA, Deskripsi)"):
+        st.caption("Klik ikon 'Copy' di pojok kanan atas setiap blok untuk menyalin.")
+        st.text("Target Audience:")
+        st.code(st.session_state.target_audience, language=None)
+        st.text("CTA:")
+        st.code(st.session_state.cta_text, language=None)
+        st.text("Deskripsi:")
+        st.code(st.session_state.product_desc, language=None)
     
     submitted = st.form_submit_button("✨ Generate Landing Page")
 
@@ -359,11 +299,6 @@ if submitted:
                 desc_prompt = product_desc if product_desc else "TIDAK ADA. Karanglah deskripsi yang sangat menarik, persuasif, dan menjual berdasarkan Nama Produk. Buat seolah-olah ini produk best-seller."
                 target_prompt = target_audience if target_audience else "TIDAK ADA. Analisa dan tentukan target audience yang paling relevan dan potensial untuk produk ini."
                 cta_prompt = cta_text if cta_text else "TIDAK ADA. Buat CTA yang mendesak dan mengundang klik (misal: Beli Sekarang, Ambil Diskon 50%, dll)."
-                
-                # Calculate Discount Label
-                discount_label = "HEMAT 90% HARI INI" # Default
-                if harga_coret and harga_jual:
-                    discount_label = calculate_discount(harga_coret, harga_jual)
                 
                 competitor_data = ""
                 if competitor_url:
@@ -401,41 +336,26 @@ if submitted:
                 if use_boosters:
                     booster_instruction = """
                     FITUR BOOSTER PENJUALAN (WAJIB ADA):
-                    1. **FAQ SECTION**: Buat section FAQ (Tanya Jawab) yang menjawab 3-5 keraguan utama pembeli (Objection Handling). Gunakan tag <details> dan <summary> untuk accordion.
-                    2. **TRUST BADGES**: Tambahkan elemen visual "Garansi 30 Hari Uang Kembali", "Pembayaran Aman", dll.
+                    1. **STICKY CTA (Mobile Only)**: Buat tombol CTA yang melayang di bawah layar (fixed bottom) khusus tampilan mobile. Gunakan class `fixed bottom-0 left-0 w-full p-4 bg-white shadow-lg md:hidden z-50`.
+                    2. **FAQ SECTION**: Buat section FAQ (Tanya Jawab) yang menjawab 3-5 keraguan utama pembeli (Objection Handling). Gunakan tag <details> dan <summary> untuk accordion.
+                    3. **TRUST BADGES**: Tambahkan elemen visual "Garansi 30 Hari Uang Kembali", "Pembayaran Aman", dll di bawah tombol CTA.
                     """
 
                 # Prepare Image Instructions
                 image_instruction = ""
                 
                 # URL Images Logic
-                if hero_image:
-                    image_instruction += f"\nHERO IMAGE (Di bawah headline utama): {hero_image}\n"
                 if product_image:
-                    image_instruction += f"\nSOLUTION IMAGE (Di bawah heading 'Solusi'): {product_image}\n"
+                    image_instruction += f"\nIMAGE URL UTAMA (Solusi Heading): {product_image}\n"
+                if solution_cta_image:
+                    image_instruction += f"\nIMAGE URL CTA/HOOK (Setelah kalimat ajakan): {solution_cta_image}\n"
+                if additional_images_str:
+                    image_instruction += f"\nIMAGE URL TAMBAHAN: {additional_images_str}\n"
                 
-                if not hero_image and not product_image:
+                if not product_image and not solution_cta_image and not additional_images_str:
                     image_instruction += "\nTIDAK ADA GAMBAR. Gunakan Placeholder dari unsplash/placehold.co.\n"
 
                 image_instruction += f"\nGAYA BAHASA: {tone} (Wajib ikuti tone ini di seluruh teks!)\n"
-                
-                # Prepare Bonus Instructions
-                bonus_instruction = ""
-                bonus_list = []
-                if bonus_1: bonus_list.append(bonus_1)
-                if bonus_2: bonus_list.append(bonus_2)
-                if bonus_3: bonus_list.append(bonus_3)
-                
-                if bonus_list:
-                    bonus_text = "\n".join([f"  - {b}" for b in bonus_list])
-                    bonus_instruction = f"""
-                    BONUS YANG HARUS DITAMPILKAN (WAJIB):
-                    Tambahkan section "BONUS EKSKLUSIF" atau "DAPATKAN BONUS INI" dengan bonus berikut:
-{bonus_text}
-                    
-                    Desain bonus section dengan card yang menarik, gunakan ikon/emoji untuk setiap bonus item.
-                    Letakkan section bonus SEBELUM pricing section untuk meningkatkan perceived value.
-                    """
 
                 base_prompt = f"""
                 Bertindaklah sebagai Expert Web Developer & UI/UX Designer kelas dunia yang biasa menangani klien "High-Ticket".
@@ -453,238 +373,101 @@ if submitted:
                 1. **PENGGUNAAN GAMBAR (WAJIB)**:
                    {image_instruction}
                    - Buat layout `zig-zag` (Gambar Kiri - Teks Kanan, lalu sebaliknya) agar dinamis.
-                INSTRUKSI DESAIN (MINIMALIS, FRESH, MUDAH DIBACA):
+                1. **VIBE**: PROFESIONAL, MENARIK, dan "SOFT". Jangan terlalu polos (boring), tapi jangan norak. Harus terlihat "Eye-Catching" tapi tetap elegan.
+                2. **COLOR PALETTE**: Gunakan warna-warna **SOFT PASTEL & GRADIENT**.
+                   - Background utama jangan hanya putih polos. Gunakan `bg-slate-50`, `bg-blue-50`, atau gradient halus `bg-gradient-to-br from-indigo-50 to-white`.
+                   - Gunakan warna Primary yang lembut tapi tegas (misal: Soft Blue, Sage Green, atau Coral).
+                3. **LAYOUT & SECTIONS**:
+                   - **Alternating Backgrounds**: Pastikan setiap section punya warna background yang selang-seling (Misal: Hero (Gradient) -> Features (White) -> Testimoni (Soft Grey) -> CTA (Accent Color)).
+                   - Gunakan **Card Design** (Kotak putih dengan shadow halus) untuk menonjolkan konten di atas background berwarna.
+                   - **NO HERO CTA**: JANGAN ada tombol CTA di Hero Section (Header). CTA baru boleh muncul setelah penjelasan produk/masalah.
+                4. **TYPOGRAPHY & READABILITY (SUPER CRITICAL)**:
+                   - **FONT**: Gunakan 'Plus Jakarta Sans' atau 'Outfit' (Google Fonts).
+                   - **NO SINGLE QUOTES (HARGA MATI)**: DILARANG KERAS menggunakan tanda petik satu (') untuk penekanan kata atau bahasa gaul!
+                     - SALAH: 'keliatan', 'aturan main', 'jualan', 'pemain cadangan'.
+                     - BENAR: Tulis biasa saja atau gunakan **Bold** untuk kata sangat penting.
+                   - **NO MARKDOWN SYNTAX (HARGA MATI)**: DILARANG menggunakan markdown syntax (asterisk) di dalam HTML!
+                     - SALAH: *italic*, **bold**, ***bold italic***
+                     - BENAR: <em>italic</em>, <strong>bold</strong>, atau tulis biasa saja.
+                     - Ini HTML, bukan Markdown! Jangan pernah pakai tanda asterisk (*) untuk formatting.
+                   - **NO COLOR EMPHASIS**: DILARANG menggunakan warna berbeda untuk penekanan teks (text-indigo-600, text-blue-600, dll).
+                     - Semua teks body harus warna uniform: `text-slate-700` atau `text-gray-700`.
+                     - Jika ingin penekanan, gunakan `<strong>` atau `<b>` (Bold) saja.
+                   - **PARAGRAPH STRUCTURE (ULTRA STRICT - NO EXCEPTIONS)**:
+                     - ATURAN EMAS: Setiap `<p>` tag HANYA boleh berisi MAKSIMAL 2 KALIMAT.
+                     - CARA KERJA:
+                       1. Tulis kalimat pertama. Titik.
+                       2. Tulis kalimat kedua. Titik.
+                       3. LANGSUNG tutup `</p>` dan buka `<p class="mb-3">` baru untuk kalimat ke-3.
+                     - CONTOH BENAR (Copy persis format ini):
+                       ```html
+                       <p class="mb-3 text-slate-700">Gue paham banget rasanya. Kerja keras bagus, tapi yang dipromosiin temen yang lebih jago ngobrol.</p>
+                       <p class="mb-3 text-slate-700">Lo bukan iri, cuma kesel. Karena lo tau, lo lebih capable.</p>
+                       <p class="mb-3 text-slate-700">Di kantor, kerja keras emang dihargai sampai titik tertentu. Setelah itu yang dinilai adalah siapa yang bisa bikin bos ngerasa nyaman.</p>
+                       ```
+                     - CONTOH SALAH (JANGAN LAKUKAN INI):
+                       ```html
+                       <p class="mb-3 text-slate-700">Gue paham banget rasanya. Kerja keras bagus, tapi yang dipromosiin temen yang lebih jago ngobrol. Lo bukan iri, cuma kesel. Karena lo tau, lo lebih capable. Di kantor, kerja keras emang dihargai sampai titik tertentu.</p>
+                       ```
+                     - ENFORCEMENT: Hitung titik (.) di setiap paragraf. Jika lebih dari 2 titik, itu SALAH TOTAL!
+                   - **LINE HEIGHT**: Gunakan `leading-normal` atau `leading-snug` (Jangan terlalu lega).
+                   - **PARAGRAPH SPACING**: Gunakan `mb-3` (Jarak antar paragraf cukup dekat).
+                   - **MOBILE PADDING**: Container teks WAJIB `px-4` di mobile (JANGAN px-6 atau px-8, terlalu lebar!).
+                   - **TEXT COLOR**: Gunakan `text-slate-700` atau `text-gray-800`.
+                   - **MAX WIDTH**: Batasi lebar teks paragraf dengan `max-w-2xl mx-auto`.
+                5. **UI TRENDS (AESTHETIC & CLEAN)**:
+                   - **PREMIUM CARDS**: Card putih dengan `rounded-2xl`, `p-6` (padding cukup), dan `shadow-[0_8px_30px_rgb(0,0,0,0.04)]`.
+                   - **VISUAL BREAKERS**: Gunakan Divider halus atau Icon kecil antar section.
+                   - **BUTTONS**: Gradient halus dengan shadow.
+                   - **SECTIONING**: `py-6` atau `py-8` (Jarak antar section TIDAK BOLEH terlalu panjang).
+                6. **MOBILE RESPONSIVENESS (HARGA MATI)**:
+                   - **CONTAINER PADDING**: Gunakan class `px-6` atau `px-8` pada container utama (`<div class="container mx-auto px-6">`).
+                   - **JANGAN MEPET**: Teks tidak boleh menyentuh pinggir layar HP. Harus ada jarak minimal 24px (1.5rem).
+                   - **FONT SIZE MOBILE**: Gunakan `text-[16px]` atau `text-[18px]` agar terbaca jelas. Jangan kekecilan.
+                   - **STACKING**: Pada mobile, kolom harus `flex-col` (menumpuk ke bawah). Jangan maksa `flex-row`.
+                7. **TRUST ELEMENTS**: Tambahkan section "Featured In" atau "Trusted By" dengan logo placeholder grayscale.
                 
-                **PRIORITAS: CLEAN, SIMPLE, READABLE**
-                Desain minimalis modern yang nyaman dibaca di HP:
-                
-                1. **TYPOGRAPHY (CLEAN & READABLE)**:
-                   - Headline (H1): text-2xl font-semibold (24px) - Clean & Bold
-                   - Subheading (H2): text-xl font-medium (20px)
-                   - Body text (P): text-base leading-relaxed (16px)
-                   - Font: Inter, system-ui, atau sans-serif modern
-                   - Color: text-gray-900 untuk heading, text-gray-700 untuk body
-                
-                2. **SPACING & PADDING** (🔒 LOCKED - JANGAN DIUBAH!):
-                   - Container: max-w-7xl mx-auto (PADDING 2PX KIRI-KANAN - FINAL!)
-                   - Section padding: py-6 (PADDING 2PX KIRI-KANAN - LOCKED!)
-                   - Paragraph spacing: mb-3
-                   - Jarak antar section: my-4 (COMPACT!)
-                   - 🔒 CRITICAL: Padding horizontal TETAP 2px!
-                
-                3. **COLORS (FRESH & MINIMALIST - FULL WHITE)**:
-                   - Background: bg-white (SEMUA SECTION - NO ALTERNATING!)
-                   - JANGAN gunakan bg-gray-50 atau warna lain
-                   - Semua section full white background
-                   - Accent color: Blue atau Teal (bg-blue-600, bg-teal-500)
-                   - Text: text-gray-900 (headings), text-gray-700 (body)
-                   - Border: border-gray-200 (subtle dividers jika perlu)
-                
-                4. **LAYOUT (SIMPLE & CLEAN - WHITE CANVAS)**:
-                   - Full white background di semua section
-                   - NO alternating backgrounds (semua putih!)
-                   - Vertical stack (flex-col) di mobile
-                   - Cards: bg-white border border-gray-200 rounded-xl (opsional)
-                   - Gunakan border atau spacing untuk pemisah section, bukan warna background
-                   - Clean spacing antar elemen
-                
-                5. **VISUAL ELEMENTS (MINIMAL)**:
-                   - NO gradient backgrounds
-                   - NO emoji di text
-                   - Simple border-l-4 untuk accent (optional)
-                   - Cards: shadow-sm hover:shadow-md (subtle elevation)
-                   - Images: rounded-lg shadow-md (simple, clean)
-                   - Focused on whitespace and breathing room
-                
-                
-                7. **OVERALL AESTHETIC**:
-                   - Clean white space
-                   - Subtle shadows (sm, md only)
-                   - Clear visual hierarchy
-                   - Easy to scan and read
-                   - Modern but not flashy
-                   - Professional and trustworthy
-                
-                ⚠️ **CRITICAL - NO CTA BUTTONS**:
-                - DILARANG membuat tombol CTA/button "Beli Sekarang", "Dapatkan Sekarang", dll
-                - JANGAN buat tag <button> atau <a> yang berfungsi sebagai CTA
-                - User akan menambahkan form order sendiri dari penyedia web eksternal
-                - Landing page ini HANYA informatif + pricing, TANPA action button
-                
-                {image_instruction}
-                
-                {bonus_instruction}
-                
-                **CSS WAJIB (CRITICAL - PASTE KE <HEAD>)**:
-                
-                Tambahkan CSS ini di <head> untuk memastikan teks tidak pecah:
-                
-                <style>
-                  * {{
-                    word-wrap: break-word;
-                    overflow-wrap: break-word;
-                    -webkit-hyphens: auto;
-                    hyphens: auto;
-                  }}
-                  
-                  body {{
-                    font-size: 16px;
-                    line-height: 1.6;
-                  }}
-                  
-                  h1, h2, h3 {{
-                    word-break: keep-all;
-                    overflow-wrap: normal;
-                  }}
-                  
-                  @media (max-width: 768px) {{
-                    h1 {{
-                      font-size: 1.5rem !important; /* 24px */
-                      line-height: 1.3 !important;
-                    }}
-                    
-                    h2 {{
-                      font-size: 1.25rem !important; /* 20px */
-                      line-height: 1.4 !important;
-                    }}
-                    
-                    p {{
-                      font-size: 1rem !important; /* 16px */
-                      line-height: 1.625 !important;
-                      margin-bottom: 1rem !important;
-                    }}
-                    
-                    /* JARAK MINIMAL KIRI/KANAN - 2px */
-                    body {{
-                      padding-left: 2px !important;
-                      padding-right: 2px !important;
-                      margin: 0 !important;
-                    }}
-                    
-                    .container, section, div {{
-                      padding-left: 2px !important;
-                      padding-right: 2px !important;
-                    }}
-                  }}
-                </style>
+                {booster_instruction}
                 
                 TEKNIS:
-                - Gunakan Tailwind CSS via CDN
-                - Mobile responsive 100%
-                - Pastikan tag <html>, <head>, <body> lengkap
-                - JANGAN gunakan JavaScript
+                - Gunakan Tailwind CSS via CDN (wajib).
+                - Pastikan Mobile Responsive 100%.
+                - Jangan gunakan CSS eksternal atau JS eksternal selain Tailwind CDN.
+                - Pastikan tag <html>, <head>, dan <body> lengkap.
+                - JIKA ADA IMAGE URL: Wajib gunakan `{product_image}` sebagai gambar utama/hero image. Jangan gunakan placeholder untuk gambar utama jika URL ini ada.
                 """
 
                 if product_type == "Ebook / Produk Digital":
-                    # Build image references
-                    hero_img_html = f'<img src="{hero_image}" class="w-full max-w-lg mx-auto rounded-2xl shadow-xl my-8" alt="Hero">' if hero_image else '<img src="https://placehold.co/600x400/e2e8f0/475569?text=Hero+Image" class="w-full max-w-lg mx-auto rounded-2xl shadow-xl my-8" alt="Hero">'
-                    product_img_html = f'<img src="{product_image}" class="w-full max-w-md mx-auto rounded-2xl shadow-lg my-6" alt="Product">' if product_image else '<img src="https://placehold.co/500x400/e2e8f0/475569?text=Product+Image" class="w-full max-w-md mx-auto rounded-2xl shadow-lg my-6" alt="Product">'
-                    
-                    scenario_prompt = f"""
+                    scenario_prompt = """
                     SKENARIO: EBOOK / DIGITAL PRODUCT (Storytelling Mode)
                     Struktur Halaman:
-                    1. **Headline Provokatif + Hero Image**: 
-                       - Tulis headline yang fokus pada pain point/frustasi target audience. Font besar & bold.
-                       - WAJIB gunakan HTML gambar ini PERSIS seperti ini (JANGAN GANTI):
-                         {hero_img_html}
-                    2. **Story Section**: 2-3 paragraf pendek. Ceritakan masalah yang relate dengan user. Sesuaikan dengan gaya bahasa yang dipilih: {tone}
-                     7. **FAQ (Tanya Jawab)**:
-                        - WAJIB: Bungkus section FAQ dengan comment HTML ini:
-                          `<!-- FAQ_START -->`
-                          (Kode Section FAQ disini)
-                          `<!-- FAQ_END -->`
-                        - WAJIB: Gunakan tag HTML `<details>` dan `<summary>` untuk membuat Accordion.
-                        - Style `<details>` agar terlihat rapi (border bottom, padding).
-                        - Style `<summary>` agar cursor pointer dan bold.
-                        - JANGAN biarkan jawaban terbuka semua. Gunakan native HTML accordion.
-                    3. **Solution + Image**: 
-                       - Tulis heading "Solusi: [Nama Produk]"
-                       - WAJIB gunakan HTML gambar ini PERSIS seperti ini (JANGAN GANTI):
-                         {product_img_html}
-                       - Tulis 2-3 paragraf penjelasan produk sebagai solusi yang JELAS dan TERSTRUKTUR
-                    4. **What You Get**: List bullet points materi/isi produk yang SPESIFIK dan JELAS.
+                    1. **Headline Provokatif**: Fokus pada pain point/frustasi {target_audience}. Gunakan font besar & bold.
+                    2. **Story Section**: 2-3 paragraf pendek. Ceritakan masalah yang relate dengan user. Gunakan bahasa santai ("Lu/Gue" atau "Anda" yang akrab).
+                    3. **Solution (2 Part dengan 2 Gambar)**: 
+                       - Part 1: Heading "Solusi: {product_name}"
+                       - LANGSUNG setelah heading, tampilkan GAMBAR PERTAMA (product_image)
+                         Format: <img src="[Link Gambar Utama]" class="w-full max-w-md mx-auto rounded-2xl shadow-lg my-6" alt="Product">
+                       - Part 2: Tulis 2 paragraf penjelasan produk
+                       - Di akhir paragraf kedua, tulis kalimat CTA/hook yang kuat (misal: "Ebook ini bongkar seni...")
+                       - LANGSUNG setelah kalimat CTA, tampilkan GAMBAR KEDUA (solution_cta_image)
+                         Format: <img src="[Link Gambar CTA]" class="w-full max-w-md mx-auto rounded-2xl shadow-lg my-6" alt="CTA">
+                    4. **What You Get**: List bullet points materi/isi produk.
                     5. **Kenapa Ini Penting**: Section yang menjelaskan WHY user harus peduli/action sekarang. Fokus pada konsekuensi TIDAK belajar ini (kehilangan peluang, tetap stuck, dll). 2-3 paragraf pendek yang memotivasi.
-                     6. **Pricing & Guarantee (PREMIUM DESIGN - CARD LAYOUT)**: 
-                        WAJIB buat section pricing dengan desain **CARD PREMIUM** agar terlihat mahal & profesional:
-                        
-                        Gunakan struktur HTML ini (sesuaikan text):
-                        <div class="w-[90%] max-w-md mx-auto bg-white rounded-3xl shadow-2xl overflow-hidden border-2 border-blue-100 relative mt-8">
-                            <!-- Header Card -->
-                            <div class="bg-gradient-to-r from-blue-600 to-indigo-700 py-4 px-6 text-center">
-                                <span class="text-white font-bold tracking-wider text-sm uppercase">✨ Penawaran Spesial Terbatas</span>
-                            </div>
-                            
-                            <!-- Body Card -->
-                            <div class="p-8 text-center">
-                                <!-- Harga Coret -->
-                                <p class="text-gray-400 text-lg mb-1">Harga Normal</p>
-                                <p class="text-2xl text-gray-400 line-through font-medium mb-4">{harga_coret if harga_coret else "Rp 1.150.000"}</p>
-                                
-                                <!-- Harga Jual -->
-                                <div class="mb-6">
-                                    <span class="bg-red-100 text-red-700 px-3 py-1 rounded-full text-sm font-bold mb-2 inline-block">{discount_label}</span>
-                                    <p class="text-5xl font-extrabold text-gray-900 mt-2 tracking-tight">{harga_jual if harga_jual else "Rp 99.000"}</p>
-                                </div>
-                                
-                                <!-- Value Comparison -->
-                                <p class="text-gray-600 text-sm mb-6 italic border-t border-gray-100 pt-4">
-                                    "Cuma seharga 2 gelas kopi, tapi ilmunya bisa dipakai seumur hidup untuk karirmu!"
-                                </p>
-                                
-                                <!-- Garansi Badge -->
-                                <div class="flex items-center justify-center gap-2 text-green-600 font-semibold bg-green-50 py-3 rounded-xl">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
-                                    <span>Garansi 30 Hari Uang Kembali</span>
-                                </div>
-                            </div>
-                        </div>
-                    
-                    
-                    PENTING - KUALITAS TEKS (MOBILE-FRIENDLY):
-                    - Teks harus RAPI, TERSTRUKTUR, dan MUDAH DIBACA di HP
-                    - WAJIB: Setiap kalimat (setelah titik) HARUS jadi PARAGRAPH TERPISAH
-                    - Format: <p>Kalimat pertama.</p><p>Kalimat kedua.</p><p>Kalimat ketiga.</p>
-                    - JANGAN gabung banyak kalimat dalam 1 tag <p>
-                    - Setiap <p> hanya boleh 1 kalimat saja
-                    - DILARANG menggunakan tanda petik satu (')
-                    - Headline tidak boleh terlalu panjang (max 10 kata)
-                    - Gunakan bahasa yang langsung to the point
+                    6. **Bonus Section**: Tambahkan 2-3 bonus fiktif yang relevan (misal: Cheatsheet, Video Tutorial) untuk menaikkan value.
+                    7. **Pricing & Guarantee**: Tampilkan harga coret (diskon) dan Garansi Uang Kembali 30 Hari.
+                    8. **Sticky CTA**: Tombol beli yang sangat menonjol warnanya.
                     """
                 else: # Produk Fisik
-                    # Build image references
-                    hero_img_html = f'<img src="{hero_image}" class="w-full max-w-lg mx-auto rounded-2xl shadow-xl my-8" alt="Hero">' if hero_image else '<img src="https://placehold.co/600x400/e2e8f0/475569?text=Product+Image" class="w-full max-w-lg mx-auto rounded-2xl shadow-xl my-8" alt="Hero">'
-                    product_img_html = f'<img src="{product_image}" class="w-full max-w-md mx-auto rounded-2xl shadow-lg my-6" alt="Product">' if product_image else '<img src="https://placehold.co/500x400/e2e8f0/475569?text=Product+Detail" class="w-full max-w-md mx-auto rounded-2xl shadow-lg my-6" alt="Product">'
-                    
-                    scenario_prompt = f"""
+                    scenario_prompt = """
                     SKENARIO: PRODUK FISIK (Visual & Urgency Mode)
                     Struktur Halaman:
-                    1. **Hero Section**: 
-                       - Background bersih, Headline kuat & singkat
-                       - WAJIB gunakan HTML gambar ini PERSIS seperti ini (JANGAN GANTI):
-                         {hero_img_html}
-                    2. **Agitation**: Sub-headline yang menekan masalah (misal: "Sering merasa minder karena...?"). Sesuaikan dengan gaya bahasa: {tone}
-                    3. **Product Solution**: 
-                       - WAJIB gunakan HTML gambar ini PERSIS seperti ini (JANGAN GANTI):
-                         {product_img_html}
-                       - Penjelasan singkat cara pakai & solusi praktis yang JELAS dan TERSTRUKTUR
-                    4. **Benefit Grid**: Layout Grid 2x2 atau 4 kolom. Ikon (bisa pakai emoji atau SVG inline) + Poin keunggulan yang SPESIFIK.
+                    1. **Hero Section**: Background bersih, Placeholder gambar produk besar di tengah/kanan. Headline kuat & singkat.
+                    2. **Agitation**: Sub-headline yang menekan masalah (misal: "Sering merasa minder karena...?").
+                    3. **Product Solution**: Penjelasan singkat cara pakai & solusi praktis.
+                    4. **Benefit Grid**: Layout Grid 2x2 atau 4 kolom. Ikon (bisa pakai emoji atau SVG inline) + Poin keunggulan.
                     5. **Social Proof**: Placeholder untuk 3 testimoni user (Foto bulat + Nama + Teks pendek).
-                     6. **Scarcity Offer & Pricing**: 
-                        - "Promo Terbatas", "Beli 2 Gratis 1", atau Countdown Timer (tampilan visual saja).
-                        - WAJIB TAMPILKAN HARGA:
-                          * Harga Coret: {harga_coret if harga_coret else "Harga Tinggi"}
-                          * Harga Jual: {harga_jual if harga_jual else "Harga Promo"}
-                    
-                    PENTING - KUALITAS TEKS:
-                    - Teks harus RAPI, TERSTRUKTUR, dan MUDAH DIBACA
-                    - WAJIB: Setiap kalimat (setelah titik) HARUS jadi PARAGRAPH TERPISAH
-                    - Format: <p>Kalimat pertama.</p><p>Kalimat kedua.</p><p>Kalimat ketiga.</p>
-                    - JANGAN gabung banyak kalimat dalam 1 tag <p>
-                    - Setiap <p> hanya boleh 1 kalimat saja
-                    - Hindari teks yang terlalu panjang atau bertele-tele
-                    - DILARANG menggunakan tanda petik satu (')
-                    - Headline tidak boleh terlalu panjang (max 10 kata)
-                    - Gunakan paragraf pendek dengan tag <p>
+                    6. **Scarcity Offer**: "Promo Terbatas", "Beli 2 Gratis 1", atau Countdown Timer (tampilan visual saja). Harga coret besar.
+                    7. **Simple Form**: Form statis (hanya tampilan) untuk Nama & WhatsApp sebelum tombol CTA.
                     """
 
                 json_instruction = """
@@ -788,78 +571,28 @@ if st.session_state.generated_html:
         components.html(st.session_state.generated_html, height=800, scrolling=True)
 
     with tab2:
-        st.caption("Preview Mobile - Pilih Model HP untuk Melihat Tampilan")
-        
-        # Phone size selector
-        phone_models = {
-            "iPhone SE / iPhone 8": 375,
-            "iPhone 12 / 13 / 14": 390,
-            "iPhone 14 Pro Max / 15 Plus": 430,
-            "Samsung Galaxy S21 / S22": 360,
-            "Samsung Galaxy S23 Ultra": 412,
-            "Google Pixel 7": 412,
-            "OnePlus / Xiaomi (Average)": 393
-        }
-        
-        selected_phone = st.selectbox(
-            "📱 Pilih Model HP:",
-            list(phone_models.keys()),
-            index=0,
-            help="Pilih model HP untuk melihat tampilan di ukuran layar yang berbeda"
-        )
-        
-        phone_width = phone_models[selected_phone]
-        
+        st.caption("Preview Mobile (iPhone SE/12/13 style - 375px)")
         col_m1, col_m2, col_m3 = st.columns([1, 2, 1])
         with col_m2:
             # Simulate mobile frame
             st.markdown(
-                f"""
+                """
                 <style>
-                .mobile-frame {{
+                .mobile-frame {
                     border: 8px solid #333;
                     border-radius: 20px;
                     overflow: hidden;
                     box-shadow: 0 10px 25px rgba(0,0,0,0.3);
-                }}
+                }
                 </style>
                 <div class="mobile-frame">
                 """, unsafe_allow_html=True
             )
-            st.caption(f"Ukuran layar: {phone_width}px")
-            components.html(st.session_state.generated_html, height=700, width=phone_width, scrolling=True)
+            components.html(st.session_state.generated_html, height=700, width=375, scrolling=True)
             st.markdown("</div>", unsafe_allow_html=True)
     
     with tab3:
-        full_html = st.session_state.generated_html
-        
-        # Split HTML based on FAQ markers
-        if "<!-- FAQ_START -->" in full_html:
-            parts = full_html.split("<!-- FAQ_START -->")
-            main_html = parts[0]
-            # Add closing tags to main_html if needed (optional, but browsers handle it)
-            # For copy-paste purposes, raw split is often better so they can just paste the form in between
-            
-            faq_part = parts[1]
-            if "<!-- FAQ_END -->" in faq_part:
-                faq_html = "<!-- FAQ_START -->" + faq_part.split("<!-- FAQ_END -->")[0] + "<!-- FAQ_END -->"
-            else:
-                faq_html = "<!-- FAQ_START -->" + faq_part
-            
-            st.info("ℹ️ **Fitur Split Code**: HTML dipisah agar Anda bisa menyisipkan Form Order di antaranya.")
-            
-            st.subheader("1. Bagian Atas (Header - Pricing)")
-            st.caption("Copy kode ini dan paste di editor web Anda. Paste Form Order Anda SETELAH kode ini.")
-            st.code(main_html, language="html")
-            
-            st.subheader("2. Bagian Bawah (FAQ)")
-            st.caption("Copy kode ini dan paste SETELAH Form Order Anda.")
-            st.code(faq_html, language="html")
-            
-            with st.expander("Lihat Full Code (Gabungan)"):
-                 st.code(full_html, language="html")
-        else:
-            st.code(full_html, language="html")
+        st.code(st.session_state.generated_html, language="html")
 
     # Download Button
     st.download_button(
